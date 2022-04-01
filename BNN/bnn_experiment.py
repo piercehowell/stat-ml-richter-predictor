@@ -39,6 +39,14 @@ def loadModels(savedir, in_features) :
     return(models)
 
 
+def get_most_likely_class(samples):
+    """
+    Returns the most likely class after running make multiple passes with a single
+    BNN.
+    """
+    mean_pred_probs = torch.mean(samples, dim=0)
+    return(torch.argmax(mean_pred_probs, dim=1))
+
 if __name__ == "__main__":
     parser = args.ArgumentParser(description="Training a BNN for Richter Predictor")
 
@@ -65,7 +73,7 @@ if __name__ == "__main__":
     val_data = [ [X_val[i], y_val[i]] for i in range(X_val.shape[0])]
     in_features = X_train.shape[1] # number of input features
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size)
-    val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size)
+    val_loader = torch.utils.data.DataLoader(val_data, batch_size=len(val_data))
     
 
     
@@ -126,7 +134,7 @@ if __name__ == "__main__":
     with torch.no_grad():
         
 
-        samples = torch.zeros((num_pred_val, batch_size, 3))
+        samples = torch.zeros((num_pred_val, len(val_data), 3))
 
         # load validation data (all batches)
         X, y = next(iter(val_loader))
@@ -142,6 +150,13 @@ if __name__ == "__main__":
     
     withinSampleMean = torch.mean(samples, dim=0)
     samplesMean = torch.mean(samples, dim=(0,1))
+    y_pred = get_most_likely_class(samples)
+    
+    #mse_loss = torch.nn.MSELoss()
+    #print("MSE Loss", mse_loss(y_pred.float(), y.float()))
+    
+    ce_loss = torch.nn.CrossEntropyLoss()
+    print("Cross Entropy Loss", ce_loss(withinSampleMean, y))
     
     withinSampleStd = torch.sqrt(torch.mean(torch.var(samples, dim=0), dim=0))
     acrossSamplesStd = torch.std(withinSampleMean, dim=0)
@@ -170,4 +185,4 @@ if __name__ == "__main__":
     plt.ylabel('std digit prob')
     plt.xticks(np.arange(3))
 
-    plt.show()
+    #plt.show()
