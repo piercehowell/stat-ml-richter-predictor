@@ -16,6 +16,10 @@ import os
 import argparse as args
 from bnn_model import RichterPredictorBNN
 from dataset import get_data
+from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
+from datetime import datetime
+from sklearn.metrics import f1_score
 
 
 def saveModels(models, savedir) :
@@ -34,7 +38,6 @@ def loadModels(savedir, in_features) :
         
         model = RichterPredictorBNN(in_features=in_features, p_mc_dropout=None)		
         model.load_state_dict(torch.load(os.path.abspath(os.path.join(savedir, f))))
-        #model = torch.load(os.path.abspath(os.path.join(savedir, f)))
         models.append(model)
     return(models)
 
@@ -45,7 +48,9 @@ def get_most_likely_class(samples):
     BNN.
     """
     mean_pred_probs = torch.mean(samples, dim=0)
-    return(torch.argmax(mean_pred_probs, dim=1))
+
+    y_pred_probs, y_pred = torch.max(mean_pred_probs, dim=1)
+    return y_pred, y_pred_probs, mean_pred_probs
 
 if __name__ == "__main__":
     parser = args.ArgumentParser(description="Training a BNN for Richter Predictor")
@@ -75,13 +80,18 @@ if __name__ == "__main__":
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size)
     val_loader = torch.utils.data.DataLoader(val_data, batch_size=len(val_data))
     
-
-    
-    
     num_batches = len(train_loader)
     digitsBatchLen = len(str(num_batches))
 
     models = []
+
+    # define loss functions and metrics
+    mse_loss = torch.nn.MSELoss()
+    ce_loss = torch.nn.CrossEntropyLoss()
+
+    # tensorboard
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    writer = SummaryWriter('runs/BNN_{}'.format(timestamp))
 
     if(args.no_train):
         models = loadModels(args.save_dir, in_features)
@@ -94,17 +104,20 @@ if __name__ == "__main__":
             print("Training model {}/{}:".format(i+1, num_networks))
             
             model = RichterPredictorBNN(in_features=in_features, p_mc_dropout=None)
+            
             loss = torch.nn.NLLLoss(reduction='mean')
 
             optimizer = Adam(model.parameters(), lr=lr)
             optimizer.zero_grad()
 
             # epochs
-            for n in np.arange(num_epochs):
-
-                for batch_id, batch in enumerate(train_loader):
+            for nepoch in np.arange(num_epochs):
+                
+                #---------------------------- TRAINING STEP ----------------------------------------------------#
+                running_loss = 0.0
+                for batch_id, batch_data in enumerate(tqdm(train_loader, 0)):
                     
-                    X, y = batch
+                    X, y = batch_data
 
                     # make a prediciton with the model
                     y_pred = model(X, stochastic=True)
@@ -118,71 +131,64 @@ if __name__ == "__main__":
                     f.backward()
 
                     optimizer.step()
-                    print("\r", ("\tEpoch {}/{}: Train step {"+(":0{}d".format(digitsBatchLen))+"}/{} prob = {:.4f} model = {:.4f} loss = {:.4f}          ").format(
-                                                                                                        n+1, num_epochs,																				batch_id+1,
-                                                                                                        num_batches,
-                                                                                    torch.exp(-log_prob.detach().cpu()).item(),
-                                                                                                        vi_model_losses.detach().cpu().item(),
-                                                                                                        f.detach().cpu().item()), end="")
-            print("")
+
+                    running_loss += f.item()
+                    if batch_id % 1000 == 999:
+                        last_loss = running_loss / 1000
+                        writer.add_scalar("ELBO Loss/train", last_loss, nepoch * len(train_loader) + batch_id + 1)
+                        running_loss = 0.0
+
+                #----------------------------------------------------------------------------------------------#
+                #-------------------- VALIDATION STEP--------------------------------------------------#
+                model.eval()
+                val_mse_loss = 0.0
+                X, y = next(iter(val_loader))
+                samples = torch.zeros((num_pred_val, len(val_data), 3))
+
+                with torch.no_grad():
+                    # run each data sample through the BNN multiple times
+                    for k in np.arange(num_pred_val):
+                        
+                        samples[i, :, :] = torch.exp(model(X))
+
+
+                y_pred, y_pred_probs, mean_y_pred_probs = get_most_likely_class(samples)
+                val_mse_loss = mse_loss(y_pred.float(), y.float())
+                val_ce_loss = ce_loss(mean_y_pred_probs, y)
+                f1 = f1_score(y, y_pred, average='micro')
+                writer.add_scalars("Validation MSE Loss", {'Validation': val_mse_loss}, nepoch)
+                writer.add_scalars("Validation Cross Entropy Loss", {'Validation' : val_ce_loss}, nepoch)
+                writer.add_scalars("Validation Micro F1 Score", {"Validation" : f1}, nepoch)
+                writer.flush()
+                #---------------------------------------------------------------------------------------#
+
             models.append(model)
     
         if(args.save_dir is not None):
             saveModels(models, args.save_dir)
 
-    # validation
-    with torch.no_grad():
-        
 
-        samples = torch.zeros((num_pred_val, len(val_data), 3))
+    
+    # print("")
+    # print("Class prediction analysis:")
+    # print("\tMean class probabilities:")
+    # print(samplesMean)
+    # print("\tPrediction standard deviation per sample:")
+    # print(withinSampleStd)
+    # print("\tPrediction standard deviation across samples:")
+    # print(acrossSamplesStd)
 
-        # load validation data (all batches)
-        X, y = next(iter(val_loader))
-        
-        # run each data sample through the BNN multiple times
-        for i in np.arange(num_pred_val):
-            
-            # randomly pick one of the trained models
-            model_id = np.random.randint(num_networks)
-            model = models[model_id]
-
-            samples[i,:,:] = torch.exp(model(X))
+    # plt.figure("Seen class probabilities")
+    # plt.bar(np.arange(3), samplesMean.numpy())
+    # plt.xlabel('digits')
+    # plt.ylabel('digit prob')	
+    # plt.ylim([0,1])
+    # plt.xticks(np.arange(3))
     
-    withinSampleMean = torch.mean(samples, dim=0)
-    samplesMean = torch.mean(samples, dim=(0,1))
-    y_pred = get_most_likely_class(samples)
-    
-    #mse_loss = torch.nn.MSELoss()
-    #print("MSE Loss", mse_loss(y_pred.float(), y.float()))
-    
-    ce_loss = torch.nn.CrossEntropyLoss()
-    print("Cross Entropy Loss", ce_loss(withinSampleMean, y))
-    
-    withinSampleStd = torch.sqrt(torch.mean(torch.var(samples, dim=0), dim=0))
-    acrossSamplesStd = torch.std(withinSampleMean, dim=0)
-    
-    print("")
-    print("Class prediction analysis:")
-    print("\tMean class probabilities:")
-    print(samplesMean)
-    print("\tPrediction standard deviation per sample:")
-    print(withinSampleStd)
-    print("\tPrediction standard deviation across samples:")
-    print(acrossSamplesStd)
-
-    plt.figure("Seen class probabilities")
-    plt.bar(np.arange(3), samplesMean.numpy())
-    plt.xlabel('digits')
-    plt.ylabel('digit prob')	
-    plt.ylim([0,1])
-    plt.xticks(np.arange(3))
-    
-    plt.figure("Seen inner and outter sample std")
-    plt.bar(np.arange(3)-0.2, withinSampleStd.numpy(), width = 0.4, label="Within sample")
-    plt.bar(np.arange(3)+0.2, acrossSamplesStd.numpy(), width = 0.4, label="Across samples")
-    plt.legend()
-    plt.xlabel('digits')
-    plt.ylabel('std digit prob')
-    plt.xticks(np.arange(3))
-
-    #plt.show()
+    # plt.figure("Seen inner and outter sample std")
+    # plt.bar(np.arange(3)-0.2, withinSampleStd.numpy(), width = 0.4, label="Within sample")
+    # plt.bar(np.arange(3)+0.2, acrossSamplesStd.numpy(), width = 0.4, label="Across samples")
+    # plt.legend()
+    # plt.xlabel('digits')
+    # plt.ylabel('std digit prob')
+    # plt.xticks(np.arange(3))
