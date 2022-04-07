@@ -112,52 +112,65 @@ class MeanFieldGaussianFeedForward(VIModule) :
 		return nn.functional.linear(x, self.samples['weights'], bias = self.samples['bias'] if self.has_bias else None)
 	
 class RichterPredictorBNN(VIModule):
-    """
-    Bayesian Neural Network for classification on the Richter Predictor Dataset
-    to classify damage grades
-    """
-    def __init__(self,
-                in_features,
-                linear_w_prior_sigma = 1.,
+	"""
+	Bayesian Neural Network for classification on the Richter Predictor Dataset
+	to classify damage grades
+	"""
+	def __init__(self,
+            	in_features,
+                linear_w_prior_sigma = 0.5,
                 linear_bias_prior_sigma=5.,
                 p_mc_dropout=0.5):
-        
-        super().__init__()
-        self.p_mc_dropout = p_mc_dropout
+		super().__init__()
+		
+		self.p_mc_dropout = p_mc_dropout
 
-        self.in_features = in_features
-        self.linear2_in_features = 50
-        self.linear3_in_features = 50
-        self.linear4_in_features = 50
+		self.in_features = in_features
+		self.linear2_in_features = 16
+		self.linear3_in_features = 32
+		self.linear4_in_features = 32
+		self.linear5_in_features = 32
+		self.linear6_in_features = 16
         
         # define a set of linear layers
-        self.linear1 = MeanFieldGaussianFeedForward(self.in_features, self.linear2_in_features,
+		self.linear1 = MeanFieldGaussianFeedForward(self.in_features, self.linear2_in_features,
                                                     weightPriorSigma=linear_w_prior_sigma,
                                                     biasPriorSigma=linear_bias_prior_sigma,
                                                     initPriorSigmaScale=1e-4)
-        self.linear2 = MeanFieldGaussianFeedForward(self.linear2_in_features, self.linear3_in_features,
-                                                    weightPriorSigma=linear_w_prior_sigma,
-                                                    biasPriorSigma=linear_bias_prior_sigma,
-                                                    initPriorSigmaScale=1e-4)
+		self.linear2 = MeanFieldGaussianFeedForward(self.linear2_in_features, self.linear3_in_features,
+													weightPriorSigma=linear_w_prior_sigma,
+													biasPriorSigma=linear_bias_prior_sigma,
+													initPriorSigmaScale=1e-4)
 
-        self.linear3 = MeanFieldGaussianFeedForward(self.linear3_in_features, self.linear4_in_features,
-                                                    weightPriorSigma=linear_w_prior_sigma,
-                                                    biasPriorSigma=linear_bias_prior_sigma,
-                                                    initPriorSigmaScale=1e-4)
-        
-        self.linear4 = MeanFieldGaussianFeedForward(self.linear4_in_features, 3,
-                                                    weightPriorSigma=linear_w_prior_sigma,
-                                                    biasPriorSigma=linear_bias_prior_sigma,
-                                                    initPriorSigmaScale=1e-4)
-        
-    def forward(self, x, stochastic=True):
-        """
-        Define the forward pass of the BNN
-        """
-        
-        x = nn.functional.relu(self.linear1(x, stochastic=stochastic))
-        x = nn.functional.relu(self.linear2(x, stochastic=stochastic))
-        x = nn.functional.relu(self.linear3(x, stochastic=stochastic))
-        x = nn.functional.relu(self.linear4(x, stochastic=stochastic))
+		self.linear3 = MeanFieldGaussianFeedForward(self.linear3_in_features, self.linear4_in_features,
+													weightPriorSigma=linear_w_prior_sigma,
+													biasPriorSigma=linear_bias_prior_sigma,
+													initPriorSigmaScale=1e-4)
 
-        return nn.functional.log_softmax(x, dim=-1)
+		self.linear4 = MeanFieldGaussianFeedForward(self.linear4_in_features, self.linear5_in_features,
+													weightPriorSigma=linear_w_prior_sigma,
+													biasPriorSigma=linear_bias_prior_sigma,
+													initPriorSigmaScale=1e-4)
+		
+		self.linear5 = MeanFieldGaussianFeedForward(self.linear5_in_features, self.linear6_in_features,
+													weightPriorSigma=linear_w_prior_sigma,
+													biasPriorSigma=linear_bias_prior_sigma,
+													initPriorSigmaScale=1e-4)
+		self.linear6 = MeanFieldGaussianFeedForward(self.linear6_in_features, 3,
+													weightPriorSigma=linear_w_prior_sigma,
+													biasPriorSigma=linear_bias_prior_sigma,
+													initPriorSigmaScale=1e-4)
+
+	def forward(self, x, stochastic=True):
+		"""
+		Define the forward pass of the BNN
+		"""
+
+		x = nn.functional.relu(self.linear1(x, stochastic=stochastic))
+		x = nn.functional.relu(self.linear2(x, stochastic=stochastic))
+		x = nn.functional.relu(self.linear3(x, stochastic=stochastic))
+		x = nn.functional.relu(self.linear4(x, stochastic=stochastic))
+		x = nn.functional.relu(self.linear5(x, stochastic=stochastic))
+		x = nn.functional.relu(self.linear6(x, stochastic=stochastic))
+
+		return nn.functional.log_softmax(x, dim=-1)
