@@ -67,6 +67,6 @@ def get_data():
     # preprocess the data
     X_train = preprocessor.fit_transform(X_train).astype(np.float32)
     X_val = preprocessor.fit_transform(X_val).astype(np.float32)
-    y_train = (y_train['damage_grade'].to_numpy() - 1)
-    y_val = (y_val['damage_grade'].to_numpy() - 1)
+    y_train = (y_train['damage_grade'].to_numpy())
+    y_val = (y_val['damage_grade'].to_numpy())
     return(X_train, y_train, X_val, y_val)
