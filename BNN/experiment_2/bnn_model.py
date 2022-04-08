@@ -171,6 +171,6 @@ class RichterPredictorBNN(VIModule):
 		x = nn.functional.relu(self.linear3(x, stochastic=stochastic))
 		x = nn.functional.relu(self.linear4(x, stochastic=stochastic))
 		x = nn.functional.relu(self.linear5(x, stochastic=stochastic))
-		x = nn.functional.relu(self.linear6(x, stochastic=stochastic))
-
+		x = self.linear6(x, stochastic=stochastic)
+		
 		return nn.functional.log_softmax(x, dim=-1)

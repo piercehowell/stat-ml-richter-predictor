@@ -195,24 +195,24 @@ if __name__ == "__main__":
 
 
     # # -------------------------------------- TEST ------------------------------------------------- #
-    # if(no_train):
+    if(no_train):
 
-    #     # load in the models
-    #     models = loadModels(in_features)
-    #     model = models[0]
-    #     samples = torch.zeros((num_pred_val, len(X_test), 3))
-    #     test_loader = torch.utils.data.DataLoader(X_test, batch_size=len(X_test))
-    #     with torch.no_grad():
-    #         X = next(iter(test_loader))
-    #         # run each data sample through the BNN multiple times
-    #         for k in np.arange(num_pred_val):
-    #             samples[k, :, :] = torch.exp(model(X))
+        # load in the models
+        models = loadModels(in_features)
+        model = models[0]
+        samples = torch.zeros((num_pred_val, len(X_test), 3))
+        test_loader = torch.utils.data.DataLoader(X_test, batch_size=len(X_test))
+        with torch.no_grad():
+            X = next(iter(test_loader))
+            # run each data sample through the BNN multiple times
+            for k in np.arange(num_pred_val):
+                samples[k, :, :] = torch.exp(model(X))
                 
-    #     y_pred, y_pred_probs, mean_y_pred_probs = get_most_likely_class(samples)
+        y_pred, y_pred_probs, mean_y_pred_probs = get_most_likely_class(samples)
 
-    #     y_pred = y_pred + 1; y_pred.astype(np.int64)
-    #     d = {'building_id': test_building_ids['building_id'].values.tolist(), 'damage_grade': y_pred.tolist()}
-    #     df = pd.DataFrame(data=d)
-    #     df.to_csv(os.path.join("test_submissions/BNN_{}.csv".format(timestamp)), index=False)
+        y_pred = y_pred + 1; y_pred.astype(np.int64)
+        d = {'building_id': test_building_ids['building_id'].values.tolist(), 'damage_grade': y_pred.tolist()}
+        df = pd.DataFrame(data=d)
+        df.to_csv(os.path.join("test_submissions/BNN_{}.csv".format(timestamp)), index=False)
 
     

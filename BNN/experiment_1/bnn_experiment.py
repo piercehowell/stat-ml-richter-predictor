@@ -209,7 +209,7 @@ if __name__ == "__main__":
                 
         y_pred, y_pred_probs, mean_y_pred_probs = get_most_likely_class(samples)
 
-        y_pred = y_pred + 1; y_pred.astype(np.int64)
+        y_pred = y_pred + 1;
         d = {'building_id': test_building_ids['building_id'].values.tolist(), 'damage_grade': y_pred.tolist()}
         df = pd.DataFrame(data=d)
         df.to_csv(os.path.join("test_submissions/BNN_{}.csv".format(timestamp)), index=False)
