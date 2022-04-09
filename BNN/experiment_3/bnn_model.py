@@ -131,6 +131,7 @@ class RichterPredictorBNN(VIModule):
 		self.linear4_in_features = 32
 		self.linear5_in_features = 32
 		self.linear6_in_features = 16
+		
 
 		self.embedding0 = nn.Embedding(31, 2)
 		self.embedding1 = nn.Embedding(1428, 2)
@@ -141,6 +142,7 @@ class RichterPredictorBNN(VIModule):
 		self.embedding6 = nn.Embedding(4, 2)
 		self.embedding7 = nn.Embedding(10, 3)
 		self.embedding8 = nn.Embedding(4, 2)
+		self.in_features = (self.in_features - 9) + 19
 
         # define a set of linear layers
 		self.linear1 = MeanFieldGaussianFeedForward(self.in_features, self.linear2_in_features,
@@ -175,18 +177,19 @@ class RichterPredictorBNN(VIModule):
 		"""
 		Define the forward pass of the BNN
 		"""
-		e0 = self.embedding0(x[:, 0])
-		e1 = self.embedding1(x[:, 1])
-		e2 = self.embedding2(x[:, 2])
-		e3 = self.embedding3(x[:, 3])
-		e4 = self.embedding4(x[:, 4])
-		e5 = self.embedding5(x[:, 5])
-		e6 = self.embedding6(x[:, 6])
-		e7 = self.embedding7(x[:, 7])
-		e8 = self.embedding8(x[:, 8])
-		x = torch.concat([e0, e1, e2, e3, e4, e5, e6, e7, e8])
-
-		x = nn.functional.relu(self.linear1(x, stochastic=stochastic))
+		e0 = self.embedding0(x[:, 0].to(torch.int32))
+		e1 = self.embedding1(x[:, 1].to(torch.int32))
+		e2 = self.embedding2(x[:, 2].to(torch.int32))
+		e3 = self.embedding3(x[:, 3].to(torch.int32))
+		e4 = self.embedding4(x[:, 4].to(torch.int32))
+		e5 = self.embedding5(x[:, 5].to(torch.int32))
+		e6 = self.embedding6(x[:, 6].to(torch.int32))
+		e7 = self.embedding7(x[:, 7].to(torch.int32))
+		e8 = self.embedding8(x[:, 8].to(torch.int32))
+		
+		x = torch.cat((e0, e1, e2, e3, e4, e5, e6, e7, e8, x[:, 9:]), dim=1)
+		
+		x = nn.functional.relu(self.linear1(x.to(torch.float32), stochastic=stochastic))
 		x = nn.functional.relu(self.linear2(x, stochastic=stochastic))
 		x = nn.functional.relu(self.linear3(x, stochastic=stochastic))
 		x = nn.functional.relu(self.linear4(x, stochastic=stochastic))
