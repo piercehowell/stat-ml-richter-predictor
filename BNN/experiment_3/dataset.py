@@ -14,13 +14,13 @@ def get_data():
     test_building_ids = test_features_df[["building_id"]]
 
     # get categorical data
-    X1 = train_vals_df[["geo_level_1_id", "geo_level_2_id", "position", "foundation_type", "roof_type", "ground_floor_type", "other_floor_type", "plan_configuration", "legal_ownership_status"]].to_numpy()
-    X_test1 = test_features_df[["geo_level_1_id", "geo_level_2_id", "position", "foundation_type", "roof_type", "ground_floor_type", "other_floor_type", "plan_configuration", "legal_ownership_status"]].to_numpy()
+    X1 = train_vals_df[["position", "foundation_type", "roof_type", "ground_floor_type", "other_floor_type", "plan_configuration", "legal_ownership_status"]].to_numpy()
+    X_test1 = test_features_df[["position", "foundation_type", "roof_type", "ground_floor_type", "other_floor_type", "plan_configuration", "legal_ownership_status"]].to_numpy()
     enc = OrdinalEncoder()
     enc.fit(X1)
     X1 = enc.transform(X1)
-
     X_test1 = enc.transform(X_test1)
+    
 
     ## get numerical data
     df = train_vals_df[[
@@ -40,12 +40,15 @@ def get_data():
     X2 = min_max_scaler.fit_transform(df.values)
     X_test2 = min_max_scaler.transform(dftest.values)
 
+    X3 = train_vals_df[['geo_level_1_id', 'geo_level_2_id']]
+    X_test3 = test_features_df[['geo_level_1_id', 'geo_level_2_id']]
+
 
     # get labels
 
     y = train_labels_df["damage_grade"].to_numpy() - 1
-    X = np.concatenate((X1,X2), axis = 1)
-    X_test = np.concatenate((X_test1, X_test2), axis=1)
+    X = np.concatenate((X3,X1,X2,), axis = 1)
+    X_test = np.concatenate((X_test3, X_test1, X_test2), axis=1)
 
     rng = np.random.RandomState(7)
     perm = rng.permutation(range(len(X)))
@@ -59,3 +62,7 @@ def get_data():
     X_val = X[trainIdx:valIdx]
     y_val = y[trainIdx:valIdx]
     return(X_train, y_train, X_val, y_val, X_test, test_building_ids)
+
+if __name__ == "__main__":
+
+    get_data()
