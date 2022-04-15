@@ -59,7 +59,7 @@ def get_data():
     preprocessor = ColumnTransformer(
         transformers=[
             ('numeric', numeric_transformer, int_columns),
-            # ('categorical', categ_transformer, categ_columns),
+            ('categorical', categ_transformer, categ_columns),
             # ('passthrough', 'passthrough', binary_columns)
         ]
     )
