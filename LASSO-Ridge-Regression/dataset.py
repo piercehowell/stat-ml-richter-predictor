@@ -30,39 +30,38 @@ binary_columns = ['has_superstructure_adobe_mud', 'has_superstructure_mud_mortar
                   'has_superstructure_other'
                   ]
 
-def get_data():
+numeric_transformer = Pipeline(steps=[
+        ('scaler', StandardScaler())
+    ])
+
+categ_transformer = Pipeline(steps=[
+    ('encoder', OrdinalEncoder(dtype=np.float32))
+])
+
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('numeric', numeric_transformer, int_columns),
+        ('categorical', categ_transformer, categ_columns),
+        ('passthrough', 'passthrough', binary_columns)
+    ]
+)
+
+def train_data():
     """
     Returns the test - val split
     """
 
-    features_df = pd.read_csv(os.path.join(current_dir, "../data/train_values.csv"))
-    labels_df = pd.read_csv(os.path.join(current_dir, "../data/train_labels.csv"))
+    features_df = pd.read_csv(os.path.join(current_dir, "../data/TRAIN.csv"))
 
     # select only the columns we want
     X = features_df[ int_columns + categ_columns + binary_columns]
-    y = labels_df['damage_grade'].to_frame()
+    y = features_df['damage_grade'].to_frame()
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
     print("Size information:")
     print("\t Number of Training Samples: {}".format(X_train.size))
     print("\t Number of Validation Samples: {}".format(X_val.size))
-
-    numeric_transformer = Pipeline(steps=[
-        ('scaler', StandardScaler())
-    ])
-
-    categ_transformer = Pipeline(steps=[
-        ('encoder', OrdinalEncoder(dtype=np.float32))
-    ])
-
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('numeric', numeric_transformer, int_columns),
-            #('categorical', categ_transformer, categ_columns),
-            ('passthrough', 'passthrough', binary_columns)
-        ]
-    )
 
     # preprocess the data
     X_train = preprocessor.fit_transform(X_train).astype(np.float32)
@@ -70,3 +69,19 @@ def get_data():
     y_train = (y_train['damage_grade'].to_numpy())
     y_val = (y_val['damage_grade'].to_numpy())
     return(X_train, y_train, X_val, y_val)
+
+def test_data():
+    """
+    Returns the test data, transformed to usable data through the pipeline
+    """
+
+    features_df = pd.read_csv(os.path.join(current_dir, "../data/TEST.csv"))
+    X = features_df[ int_columns + categ_columns + binary_columns]
+    y = features_df['damage_grade'].to_frame()
+
+    print("\t Number of Test Samples: {}".format(X.size))
+
+    # preprocess the data
+    X = preprocessor.fit_transform(X).astype(np.float32)
+    y = (y['damage_grade'].to_numpy())
+    return X, y
