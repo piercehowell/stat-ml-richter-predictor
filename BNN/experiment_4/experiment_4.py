@@ -21,6 +21,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from sklearn.metrics import f1_score
 import pandas as pd
+from torch.optim.lr_scheduler import ExponentialLR
 
 
 def saveModels(models) :
@@ -82,12 +83,14 @@ if __name__ == "__main__":
     train_data = [ [X_train[i], y_train[i]] for i in range(X_train.shape[0])]
     val_data = [ [X_val[i], y_val[i]] for i in range(X_val.shape[0])]
     in_features = X_train.shape[1] # number of input features
-    
+    print(in_features)
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size)
     val_loader = torch.utils.data.DataLoader(val_data, batch_size=len(val_data))
     
     
     num_batches = len(train_loader)
+
+    
     # -----------------------------------------------------------------------
 
     # All models trained are appended to this model list
@@ -117,6 +120,7 @@ if __name__ == "__main__":
             loss = torch.nn.NLLLoss(reduction='mean')
 
             optimizer = Adam(model.parameters(), lr=lr)
+            scheduler = ExponentialLR(optimizer, gamma=0.9)
             optimizer.zero_grad()
 
             # epochs
@@ -151,6 +155,7 @@ if __name__ == "__main__":
                     if(args.save_model is True):
                         saveModels(models)
 
+                scheduler.step()
                 #----------------------------------------------------------------------------------------------#
                 #-------------------- VALIDATION STEP--------------------------------------------------#
                 model.eval()
@@ -203,7 +208,7 @@ if __name__ == "__main__":
             plt.plot([0, 1], [0, 1], linestyle='--')
             plt.xlabel("Predicted Probability")
             plt.ylabel("Empirical Frequency")
-            plt.savefig('figures/exp3_cal_curve_1.png')
+            plt.savefig('figures/exp4_cal_curve_1.png')
 
             y2_true = np.copy(y); y2_true[y == 1] = 1; y2_true[y != 1] = 0
             y2_pred = np.copy(mean_y_pred_probs[:, 1])
@@ -213,7 +218,7 @@ if __name__ == "__main__":
             plt.plot([0, 1], [0, 1], linestyle='--')
             plt.xlabel("Predicted Probability")
             plt.ylabel("Empirical Frequency")
-            plt.savefig('figures/exp3_cal_curve_2.png')
+            plt.savefig('figures/exp4_cal_curve_2.png')
 
             y3_true = np.copy(y); y3_true[y == 2] = 1; y3_true[y != 2] = 0
             y3_pred = np.copy(mean_y_pred_probs[:, 2])
@@ -223,7 +228,7 @@ if __name__ == "__main__":
             plt.plot([0, 1], [0, 1], linestyle='--')
             plt.xlabel("Predicted Probability")
             plt.ylabel("Empirical Frequency")
-            plt.savefig('figures/exp3_cal_curve_3.png')
+            plt.savefig('figures/exp4_cal_curve_3.png')
 
             
     
