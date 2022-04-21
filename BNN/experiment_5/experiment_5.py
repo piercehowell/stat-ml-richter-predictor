@@ -76,7 +76,8 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     no_train = args.no_train
     num_rounds = args.num_rounds
-    K=15
+    K=250
+    num_epochs_in_rounds = 3
     # -------------------------------------------------------------------
 
     # ------------------------------- DATA ------------------#
@@ -122,29 +123,27 @@ if __name__ == "__main__":
             X_test_bin = test_df[binary_features].values
 
             X_train = np.concatenate((X_train_geo, X_train_categ, X_train_numer, X_train_bin), axis=1)
-            X_train = X_train[:100000]
+            #X_train = X_train[:100000]
             X_test = np.concatenate((X_test_geo, X_test_categ, X_test_numer, X_test_bin), axis=1)
 
             # get the labels
             y_train = train_df["damage_grade"].to_numpy() - 1
-            y_train = y_train[:100000]
+            #y_train = y_train[:100000]
             y_test = test_df["damage_grade"].to_numpy() - 1
 
             # split the X, y into training and seed (seed is 5% of original dataset)
+            X_train_all = np.copy(X_train); y_train_all = np.copy(y_train)
             X_train, X_seed, y_train, y_seed = train_test_split(X_train, y_train, test_size=0.05)
 
             # train val split
             X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.25, random_state=42)
 
             self.in_features = X_train.shape[1]
-            # self.train_data =  [ [X_train[i], y_train[i]] for i in range(X_train.shape[0])]
-            # self.val_data = [ [X_val[i], y_val[i]] for i in range(X_val.shape[0])]
-            # self.test_data = [ [X_test[i], y_test[i]] for i in range(X_test.shape[0])]
-            # self.seed_data = [ [X_seed[i], y_seed[i]] for i in range(X_seed.shape[0])]
             self.train_data = CustomDataset(X_train, y_train)
             self.val_data = CustomDataset(X_val ,y_val)
             self.test_data = CustomDataset(X_test, y_test)
             self.seed_data = CustomDataset(X_seed, y_seed)
+            self.all_train_data = CustomDataset(X_train_all, y_train_all)
     
 
     class CustomDataset(Dataset):
@@ -339,7 +338,7 @@ if __name__ == "__main__":
         seed_data_loader = torch.utils.data.DataLoader(my_data.seed_data, batch_size=batch_size)
         N = len(my_data.seed_data)
 
-        for nepochs in np.arange(num_epochs):
+        for nepochs in np.arange(num_epochs_in_rounds):
 
             for id, seed_data in enumerate(tqdm(seed_data_loader, 0)):
 
@@ -361,7 +360,58 @@ if __name__ == "__main__":
             validation_step()
             scheduler.step()
 
-        #print("Finished with round {}".form)
+        print("Finished with round {}".format(r))
 
     #-------------------------------------------------------------------#
+
+    # ------------------- TRAINING ON SAME AMOUNT OF DATA IN TOTALED OF ACTIVE LEARNING
+
+    print("Active Learning Finished; Now statically training a new model on the same set as Seed final.")
+    all_train_X = np.copy(my_data.all_train_data.X); all_train_y = np.copy(my_data.all_train_data.y)
+    indices = np.arange(all_train_X.shape[0])
+    np.random.shuffle(indices)
+
+    all_train_X = all_train_X[indices]
+    all_train_y = all_train_y[indices]
+    num_final_seed = len(my_data.seed_data)
+    all_train_data = CustomDataset(all_train_X[:num_final_seed], all_train_y[:num_final_seed])
+
+    tot_train_data_loader = torch.utils.data.DataLoader(all_train_data, batch_size=batch_size)
+    N = len(my_data.seed_data)
+
+    # train the network
+    model = RichterPredictorBNN(in_features=my_data.in_features, p_mc_dropout=None)
+    loss = torch.nn.NLLLoss(reduction='mean')
+    optimizer = Adam(model.parameters(), lr=lr)
+    scheduler = ExponentialLR(optimizer, gamma=0.9)
+    optimizer.zero_grad()
+
+    for nepochs in np.arange(num_epochs):
+
+        for id, seed_data in enumerate(tqdm(seed_data_loader, 0)):
+
+            X, y = seed_data
+
+            # make a prediction with the model
+            y_pred = model(X, stochastic=True)
+            log_prob = loss(y_pred, y)
+            vi_model_losses = model.evalAllLosses()
+                    
+            # negative estimate of ELBO
+            f =  N*log_prob + vi_model_losses
+
+            optimizer.zero_grad()
+            f.backward()
+
+            optimizer.step()
+
+        validation_step()
+        scheduler.step()
+
+    samples, y_val = validation_step()
+    plot_calibration_curves(samples, y_val)
+
+
+
+    #
     plt.show()
