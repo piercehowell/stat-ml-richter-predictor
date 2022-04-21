@@ -126,11 +126,11 @@ class RichterPredictorBNN(VIModule):
 		self.p_mc_dropout = p_mc_dropout
 
 		self.in_features = in_features
-		self.linear2_in_features = 16
-		self.linear3_in_features = 32
-		self.linear4_in_features = 32
-		self.linear5_in_features = 32
-		self.linear6_in_features = 16
+		self.linear2_in_features = 128
+		self.linear3_in_features = 128
+		self.linear4_in_features = 128
+		self.linear5_in_features = 64
+		self.linear6_in_features = 32
 		
 
 		self.embedding0 = nn.Embedding(31, 2) 	# geo_level_1_id

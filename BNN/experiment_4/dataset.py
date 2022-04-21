@@ -54,8 +54,8 @@ def get_data():
     # get labels
 
     y = train_labels_df["damage_grade"].to_numpy() - 1
-    X = np.concatenate((X3,X1,X2,), axis = 1)
-    X_test = np.concatenate((X_test3, X_test1, X_test2), axis=1)
+    X = np.concatenate((X3,X1,X2,X4), axis = 1)
+    X_test = np.concatenate((X_test3, X_test1, X_test2, X_test4), axis=1)
 
     rng = np.random.RandomState(7)
     perm = rng.permutation(range(len(X)))
