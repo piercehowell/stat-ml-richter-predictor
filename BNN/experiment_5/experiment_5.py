@@ -23,6 +23,7 @@ import pandas as pd
 from torch.optim.lr_scheduler import ExponentialLR
 from sklearn.calibration import calibration_curve
 from torch.utils.data import Dataset
+import copy
 
 
 def saveModels(models) :
@@ -76,8 +77,9 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     no_train = args.no_train
     num_rounds = args.num_rounds
-    K=250
-    num_epochs_in_rounds = 3
+    K=15000
+    num_epochs_in_rounds = 1
+    models = [] # 1st model is the active learning model, 2nd model is the static trained model
     # -------------------------------------------------------------------
 
     # ------------------------------- DATA ------------------#
@@ -133,18 +135,21 @@ if __name__ == "__main__":
 
             # split the X, y into training and seed (seed is 5% of original dataset)
             X_train_all = np.copy(X_train); y_train_all = np.copy(y_train)
-            X_train, X_seed, y_train, y_seed = train_test_split(X_train, y_train, test_size=0.05)
+            X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.15)
 
             # train val split
-            X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.25, random_state=42)
+            X_train, X_seed, y_train, y_seed = train_test_split(X_train, y_train, test_size=0.10)
 
             self.in_features = X_train.shape[1]
             self.train_data = CustomDataset(X_train, y_train)
             self.val_data = CustomDataset(X_val ,y_val)
             self.test_data = CustomDataset(X_test, y_test)
             self.seed_data = CustomDataset(X_seed, y_seed)
+            self.og_seed_data = copy.deepcopy(self.seed_data)
             self.all_train_data = CustomDataset(X_train_all, y_train_all)
-    
+
+            print(len(self.train_data))
+            print(len(self.seed_data))    
 
     class CustomDataset(Dataset):
         def __init__(self, X, y):
@@ -228,7 +233,7 @@ if __name__ == "__main__":
     # ----------------------- VALIDATION STEP ---------------------------
     val_data_loader = torch.utils.data.DataLoader(my_data.val_data, batch_size=len(my_data.val_data))
     
-    def validation_step():
+    def validation_step(model):
         model.eval()
         val_mse_loss = 0.0
         X, y = next(iter(val_data_loader))
@@ -258,6 +263,9 @@ if __name__ == "__main__":
 
     
     # ------------------ SEED SAMPLE TRAINING -------------------------
+    print("Beginning initial training on the seed sample set...")
+    print("-----------------------------------------------------")
+
     seed_data_loader = torch.utils.data.DataLoader(my_data.seed_data, batch_size=batch_size)
     N = len(my_data.seed_data)
 
@@ -280,21 +288,23 @@ if __name__ == "__main__":
 
             optimizer.step()
 
-        validation_step()
+        validation_step(model)
         scheduler.step()
 
-    samples, y_val = validation_step()
-    plot_calibration_curves(samples, y_val)
+    samples, y_val = validation_step(model)
+    #plot_calibration_curves(samples, y_val)
+    #print("Close all the figures to continue")
+    #plt.show()
     # # ---------------------------------------------------------------------
 
     # ---------------------- DEFINE ACTIVE DATA SELECTION FUNCTION------------#
 
-    def active_data_selection():
+    def active_data_selection(model):
         """
         Feed in the currently trained model
         """
         global my_data
-        
+        print(len(my_data.train_data))
         train_loader = torch.utils.data.DataLoader(my_data.train_data, batch_size=len(my_data.train_data))
         X, y = next(iter(train_loader))
         samples = torch.zeros((num_pred_val, len(my_data.train_data), 3))
@@ -309,8 +319,9 @@ if __name__ == "__main__":
         
         # calculate the entropy for each estimate (tells how uncertain it is about each)
         # estimate
-        #print(mean_y_pred_probs)
+        
         H = -1 * np.sum(mean_y_pred_probs.numpy() * np.log(mean_y_pred_probs.numpy()+1E-16), axis=1)
+
         #
         # get the indicies of the k most uncertain elements
         ind = np.argpartition(H, -K)[-K:]
@@ -321,28 +332,31 @@ if __name__ == "__main__":
         top_k_train_y = y[ind]
         top_k_train_data = [top_k_train_X, top_k_train_y]
         my_data.train_data.delete(ind)
-        
-        # print("Before seed data shape", my_data.seed_data.shape)
         my_data.seed_data.add(top_k_train_X, top_k_train_y)
-        print("Seed Data Shape", len(my_data.seed_data))
-        # print("After seed data shape", my_data.seed_data.shape)
         return
 
     # ---------------------------------------------------------------------------
     # ------------------- ACTIVE LEARNING TRAINING ---------------------#
-
+    print("Beginning Active Learning ...")
+    print("-----------------------------------------------------------")
     for r in range(num_rounds):
-
-        active_data_selection()
-       
+        
+        active_data_selection(model)
+        
         seed_data_loader = torch.utils.data.DataLoader(my_data.seed_data, batch_size=batch_size)
         N = len(my_data.seed_data)
+        
+        #model = RichterPredictorBNN(in_features=my_data.in_features, p_mc_dropout=None)
+        #loss = torch.nn.NLLLoss(reduction='mean')
+        #optimizer = Adam(model.parameters(), lr=lr)
+        #scheduler = ExponentialLR(optimizer, gamma=0.9)
+        #optimizer.zero_grad()
 
-        for nepochs in np.arange(num_epochs_in_rounds):
+        for nepochs in np.arange(num_epochs):
 
-            for id, seed_data in enumerate(tqdm(seed_data_loader, 0)):
+            for id, seed_d in enumerate(tqdm(seed_data_loader, 0)):
 
-                X, y = seed_data
+                X, y = seed_d
 
                 # make a prediction with the model
                 y_pred = model(X, stochastic=True)
@@ -357,27 +371,40 @@ if __name__ == "__main__":
 
                 optimizer.step()
 
-            validation_step()
+            validation_step(model)
             scheduler.step()
 
         print("Finished with round {}".format(r))
 
-    #-------------------------------------------------------------------#
+    validation_step(model)
+    plot_calibration_curves(samples, y_val)
+    print("Close all the figures to continue")
+    plt.show()
+    models.append(copy.deepcopy(model))
+    # #-------------------------------------------------------------------#
 
     # ------------------- TRAINING ON SAME AMOUNT OF DATA IN TOTALED OF ACTIVE LEARNING
-
-    print("Active Learning Finished; Now statically training a new model on the same set as Seed final.")
-    all_train_X = np.copy(my_data.all_train_data.X); all_train_y = np.copy(my_data.all_train_data.y)
+    print("Beginning static training on random subset of entire training set to compare models")
+    print("---------------------------------------------------------------------------------")
+    
+    # print("Active Learning Finished; Now statically training a new model on the same set as Seed final.")
+    all_train_X = np.copy(my_data.train_data.X); all_train_y = np.copy(my_data.train_data.y)
     indices = np.arange(all_train_X.shape[0])
     np.random.shuffle(indices)
-
     all_train_X = all_train_X[indices]
     all_train_y = all_train_y[indices]
-    num_final_seed = len(my_data.seed_data)
-    all_train_data = CustomDataset(all_train_X[:num_final_seed], all_train_y[:num_final_seed])
 
-    tot_train_data_loader = torch.utils.data.DataLoader(all_train_data, batch_size=batch_size)
-    N = len(my_data.seed_data)
+    # num_final_seed = len(my_data.seed_data)
+    # all_train_data = CustomDataset(all_train_X[:num_final_seed], all_train_y[:num_final_seed])
+    # tot_train_data_loader = torch.utils.data.DataLoader(all_train_data, batch_size=batch_size)
+    # N = len(all_train_data)
+
+    og_seed_data_loader = torch.utils.data.DataLoader(my_data.og_seed_data, batch_size=batch_size)
+
+    random_added_data = copy.deepcopy(my_data.og_seed_data)
+    random_train_X = all_train_X[:K]; random_train_y = all_train_y[:K]
+    random_added_data.add(random_train_X, random_train_y)
+    random_added_data_loader = torch.utils.data.DataLoader(random_added_data, batch_size=batch_size)
 
     # train the network
     model = RichterPredictorBNN(in_features=my_data.in_features, p_mc_dropout=None)
@@ -388,9 +415,9 @@ if __name__ == "__main__":
 
     for nepochs in np.arange(num_epochs):
 
-        for id, seed_data in enumerate(tqdm(seed_data_loader, 0)):
+        for id, og_seed_data in enumerate(tqdm(og_seed_data_loader, 0)):
 
-            X, y = seed_data
+            X, y = og_seed_data
 
             # make a prediction with the model
             y_pred = model(X, stochastic=True)
@@ -405,11 +432,79 @@ if __name__ == "__main__":
 
             optimizer.step()
 
-        validation_step()
+        validation_step(model)
         scheduler.step()
 
-    samples, y_val = validation_step()
+    # Add K more random samples
+    print("Adding in the random samples")
+    for nepochs in np.arange(num_epochs):
+
+        for id, data in enumerate(tqdm(random_added_data_loader, 0)):
+
+            X, y = data
+
+            # make a prediction with the model
+            y_pred = model(X, stochastic=True)
+            log_prob = loss(y_pred, y)
+            vi_model_losses = model.evalAllLosses()
+                    
+            # negative estimate of ELBO
+            f =  N*log_prob + vi_model_losses
+
+            optimizer.zero_grad()
+            f.backward()
+
+            optimizer.step()
+
+        validation_step(model)
+        scheduler.step()
+
+    samples, y_val = validation_step(model)
     plot_calibration_curves(samples, y_val)
+    models.append(copy.deepcopy(model))
+
+
+    # ----------------------------------------------------------- COMPARE WITH THE TEST SET --------------------------------------------------------------------------------------
+
+    active_learning_model = models[0];
+    static_model = models[1]
+
+    active_learning_model.eval()
+    static_model.eval()
+
+    
+    test_data_loader = torch.utils.data.DataLoader(my_data.test_data, batch_size=len(my_data.test_data))
+    X, y = next(iter(test_data_loader))
+
+    samples_active = torch.zeros((num_pred_val, len(my_data.test_data), 3))
+    samples_static = torch.zeros((num_pred_val, len(my_data.test_data), 3))
+
+    with torch.no_grad():
+        # run each data sample through the BNN multiple times
+        for k in np.arange(num_pred_val):
+            
+            samples_active[k, :, :] = torch.exp(active_learning_model(X))
+            samples_static[k, :, :] = torch.exp(static_model(X))
+
+
+    y_pred, y_pred_probs, mean_y_pred_probs = get_most_likely_class(samples_active)
+    active_mse_loss = mse_loss(y_pred.float(), y.float())
+    active_ce_loss = ce_loss(mean_y_pred_probs, y)
+    active_f1 = f1_score(y, y_pred, average='micro')
+
+    y_pred, y_pred_probs, mean_y_pred_probs = get_most_likely_class(samples_static)
+    static_mse_loss = mse_loss(y_pred.float(), y.float())
+    static_ce_loss = ce_loss(mean_y_pred_probs, y)
+    static_f1 = f1_score(y, y_pred, average='micro')
+
+
+
+    print("** Test Results**")
+    print("-------------------------------------------------------------")
+    print("(Active Learning) Micro F1 Score: {}".format(active_f1))
+    print("(Static Learning) Micro F1 Score: {}".format(static_f1))
+    print("")
+
 
 
 
