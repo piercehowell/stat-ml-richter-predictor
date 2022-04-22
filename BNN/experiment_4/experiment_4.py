@@ -3,8 +3,6 @@
 """
 Author: Pierce Howell
 
-Most of this model is adapted from 
-https://github.com/french-paragon/BayesianMnist.git
 """
 
 import numpy as np
