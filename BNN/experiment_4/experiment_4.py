@@ -120,7 +120,7 @@ if __name__ == "__main__":
             loss = torch.nn.NLLLoss(reduction='mean')
 
             optimizer = Adam(model.parameters(), lr=lr)
-            scheduler = ExponentialLR(optimizer, gamma=0.9)
+            scheduler = ExponentialLR(optimizer, gamma=0.5)
             optimizer.zero_grad()
 
             # epochs
