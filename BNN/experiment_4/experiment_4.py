@@ -3,6 +3,8 @@
 """
 Author: Pierce Howell
 
+Most of this model is adapted from 
+https://github.com/french-paragon/BayesianMnist.git
 """
 
 import numpy as np
@@ -20,7 +22,6 @@ from datetime import datetime
 from sklearn.metrics import f1_score
 import pandas as pd
 from torch.optim.lr_scheduler import ExponentialLR
-from sklearn.calibration import calibration_curve
 
 
 def saveModels(models) :
@@ -65,6 +66,7 @@ if __name__ == "__main__":
     parser.add_argument('--save-model', action="store_true", help="Directory where the model is saved")
     args = parser.parse_args()
     
+    run_test = True
     # ----------------------- SAVING ARGUMENTS-------------------------
     num_networks = args.num_networks
     lr = args.learning_rate
@@ -77,18 +79,15 @@ if __name__ == "__main__":
 
     # ---------------------- GET THE DATA -------------------------------
     # TODO: get the training and validation sets
-    #X_train, y_train, X_val, y_val, X_test, test_building_ids = get_data()
     X_train, y_train, X_val, y_val, X_test, y_test = get_data()
     N = len(X_train)
-    #train_data = [ [X_train[i], y_train[i]] for i in range(X_train.shape[0])]
-    #val_data = [ [X_val[i], y_val[i]] for i in range(X_val.shape[0])]
-    train_data = CustomDataset(X_train, y_train)
-    val_data = CustomDataset(X_val, y_val)
-    test_data = CustomDataset(X_test, y_test)
+    train_data = [ [X_train[i], y_train[i]] for i in range(X_train.shape[0])]
+    val_data = [ [X_val[i], y_val[i]] for i in range(X_val.shape[0])]
     in_features = X_train.shape[1] # number of input features
+    print(in_features)
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size)
     val_loader = torch.utils.data.DataLoader(val_data, batch_size=len(val_data))
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=len(test_data))
+    test_data = CustomDataset(X_test, y_test)
     
     
     num_batches = len(train_loader)
@@ -123,7 +122,7 @@ if __name__ == "__main__":
             loss = torch.nn.NLLLoss(reduction='mean')
 
             optimizer = Adam(model.parameters(), lr=lr)
-            scheduler = ExponentialLR(optimizer, gamma=0.5)
+            scheduler = ExponentialLR(optimizer, gamma=0.9)
             optimizer.zero_grad()
 
             # epochs
@@ -200,38 +199,38 @@ if __name__ == "__main__":
             
 
             # how about calibration curve
-            
+            from sklearn.calibration import calibration_curve
 
             # do it individually for each class
             y1_true = np.copy(y); y1_true[y == 0] = 1; y1_true[y != 0] = 0
             y1_pred = np.copy(mean_y_pred_probs[:, 0])
             prob_y1_true, prob_y1_pred = calibration_curve(y1_true, y1_pred, n_bins=30) 
-            plt.figure("(Val) Calibration Curve for Damage Grade 1")
+            plt.figure("Calibration Curve for Damage Grade 1")
             plt.plot(prob_y1_pred, prob_y1_true)
             plt.plot([0, 1], [0, 1], linestyle='--')
             plt.xlabel("Predicted Probability")
             plt.ylabel("Empirical Frequency")
-            plt.savefig('figures/exp4_val_cal_curve_1.png')
+            plt.savefig('figures/exp4_cal_curve_1.png')
 
             y2_true = np.copy(y); y2_true[y == 1] = 1; y2_true[y != 1] = 0
             y2_pred = np.copy(mean_y_pred_probs[:, 1])
             prob_y2_true, prob_y2_pred = calibration_curve(y2_true, y2_pred, n_bins=30) 
-            plt.figure("(Val) Calibration Curve for Damage Grade 2")
+            plt.figure("Calibration Curve for Damage Grade 2")
             plt.plot(prob_y2_pred, prob_y2_true)
             plt.plot([0, 1], [0, 1], linestyle='--')
             plt.xlabel("Predicted Probability")
             plt.ylabel("Empirical Frequency")
-            plt.savefig('figures/exp4_val_cal_curve_2.png')
+            plt.savefig('figures/exp4_cal_curve_2.png')
 
             y3_true = np.copy(y); y3_true[y == 2] = 1; y3_true[y != 2] = 0
             y3_pred = np.copy(mean_y_pred_probs[:, 2])
             prob_y3_true, prob_y3_pred = calibration_curve(y3_true, y3_pred, n_bins=30) 
-            plt.figure("(Val) Calibration Curve for Damage Grade 3")
+            plt.figure("Calibration Curve for Damage Grade 3")
             plt.plot(prob_y3_pred, prob_y3_true)
             plt.plot([0, 1], [0, 1], linestyle='--')
             plt.xlabel("Predicted Probability")
             plt.ylabel("Empirical Frequency")
-            plt.savefig('figures/exp4_val_cal_curve_3.png')
+            plt.savefig('figures/exp4_cal_curve_3.png')
 
             
     
@@ -240,7 +239,9 @@ if __name__ == "__main__":
 
 
     # # -------------------------------------- TEST ------------------------------------------------- #
-    if(no_train):
+    if(no_train or run_test):
+        
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=len(test_data))
 
         # load in the models
         models = loadModels(in_features)
@@ -299,11 +300,6 @@ if __name__ == "__main__":
         plt.xlabel("Predicted Probability")
         plt.ylabel("Empirical Frequency")
         plt.savefig('figures/exp4_test_cal_curve_3.png')
-
-        # y_pred = y_pred + 1;
-        # d = {'building_id': test_building_ids['building_id'].values.tolist(), 'damage_grade': y_pred.tolist()}
-        # df = pd.DataFrame(data=d)
-        # df.to_csv(os.path.join("test_submissions/BNN_{}.csv".format(timestamp)), index=False)
 
     
     plt.show()
