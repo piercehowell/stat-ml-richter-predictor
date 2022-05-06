@@ -1,0 +1,5 @@
+num_epochs: 10
+- learning_rate: 0.01
+- num-pred-val: 50
+- batch_size: 64
+    With the values above, I have achieved a model with an F1 Micro Score of 0.707 on validation, my submission on the official testing set was 0.7078
